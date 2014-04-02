@@ -250,7 +250,9 @@ void initContext(hwc_context_t *ctx)
 
     for (uint32_t i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
         ctx->mHwcDebug[i] = new HwcDebug(i);
+        ctx->mPrevHwLayerCount[i] = 0;
     }
+
     MDPComp::init(ctx);
 
     ctx->vstate.enable = false;
@@ -1162,9 +1164,8 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
 
     //Accumulate acquireFenceFds for MDP
     for(uint32_t i = 0; i < list->numHwLayers; i++) {
-        if(((list->hwLayers[i].compositionType == HWC_OVERLAY &&
-                        (layerProp[i].mFlags & HWC_MDPCOMP)) ||
-                        list->hwLayers[i].compositionType == HWC_BLIT) &&
+        if((list->hwLayers[i].compositionType == HWC_OVERLAY &&
+                        (layerProp[i].mFlags & HWC_MDPCOMP)) &&
                         list->hwLayers[i].acquireFenceFd >= 0) {
             if(UNLIKELY(swapzero))
                 acquireFd[count++] = -1;
@@ -1223,7 +1224,13 @@ int hwc_sync(hwc_context_t *ctx, hwc_display_contents_1_t* list, int dpy,
                     list->hwLayers[i].releaseFenceFd = -1;
             } else if(list->hwLayers[i].releaseFenceFd < 0) {
                 //If rotator has not already populated this field.
-                list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+                if(list->hwLayers[i].compositionType == HWC_BLIT) {
+                    //For Blit, the app layers should be released when the Blit is
+                    //complete. This fd was passed from copybit->draw
+                    list->hwLayers[i].releaseFenceFd = dup(fd);
+                } else {
+                    list->hwLayers[i].releaseFenceFd = dup(releaseFd);
+                }
             }
         }
     }
@@ -1437,7 +1444,7 @@ bool needToForceRotator(hwc_context_t *ctx, const int& dpy,
     int nYuvCount = ctx->listStats[dpy].yuvCount;
     bool forceRot = false;
     //Force rotator for resolution change only if 1 yuv layer on primary
-    if(!dpy && (nYuvCount == 1)) {
+    if(nYuvCount == 1) {
         uint32_t& prevWidth = ctx->mPrevWHF[dpy].w;
         uint32_t& prevHeight = ctx->mPrevWHF[dpy].h;
         if((prevWidth != w) || (prevHeight != h)) {
