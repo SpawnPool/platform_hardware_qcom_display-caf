@@ -169,7 +169,6 @@ void MDPComp::setMDPCompLayerFlags(hwc_context_t *ctx,
             layerProp[index].mFlags |= HWC_MDPCOMP;
             layer->compositionType = HWC_OVERLAY;
             layer->hints |= HWC_HINT_CLEAR_FB;
-            mCachedFrame.hnd[index] = NULL;
         } else {
             if(!mCurrentFrame.needsRedraw)
                 layer->compositionType = HWC_OVERLAY;
@@ -457,8 +456,8 @@ bool MDPComp::isFullFrameDoable(hwc_context_t *ctx,
         }
 
         // If buffer is non contiguous then force GPU comp
-        if(isNonContigBuffer(hnd)) {
-            ALOGD_IF(isDebug(), "%s: Buffer is Non contiguous,"
+        if(isNonContigBuffer(hnd) && ctx->mMDP.version > qdutils::MDP_V4_3) {
+                    ALOGD_IF(isDebug(), "%s: Buffer is Non contiguous,"
                                 "so mdpcomp is not possible",__FUNCTION__);
             return false;
         }
@@ -629,7 +628,8 @@ bool MDPComp::isOnlyVideoDoable(hwc_context_t *ctx,
         }
         private_handle_t *hnd = (private_handle_t *)layer->handle;
         // If buffer is non contiguous then force GPU comp
-        if(isNonContigBuffer(hnd)) {
+
+        if(isNonContigBuffer(hnd) && ctx->mMDP.version > qdutils::MDP_V4_3) {
             ALOGD_IF(isDebug(), "%s: Buffer is Non contiguous,"
                                 "so mdpcomp is not possible",__FUNCTION__);
             return false;
